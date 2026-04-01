@@ -1,0 +1,6 @@
+{
+  "name": "Rust CI",
+  "description": "Standard CI for lagertha-rs Rust crates: fmt, clippy, build, test.",
+  "iconName": "rust-ci",
+  "categories": ["Rust"]
+}

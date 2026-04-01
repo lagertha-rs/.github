@@ -1,0 +1,6 @@
+{
+  "name": "Rust JVM CI",
+  "description": "CI for lagertha-vm: fmt, clippy, build, test with JDK for compiled test fixtures.",
+  "iconName": "rust-jvm-ci",
+  "categories": ["Rust"]
+}
