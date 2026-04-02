@@ -24,6 +24,7 @@ Published to crates.io primarily to make multi-repo development easier and to re
 | [rnsc](https://github.com/lagertha-rs/rnsc) | RNS compiler CLI | [![crates.io](https://img.shields.io/crates/v/rnsc.svg)](https://crates.io/crates/rnsc) |
 | [rns-lsp](https://github.com/lagertha-rs/rns-lsp) | RNS language server (LSP) | [![crates.io](https://img.shields.io/crates/v/rns-lsp.svg)](https://crates.io/crates/rns-lsp) |
 | [lagertha-vm](https://github.com/lagertha-rs/lagertha-vm) | The VM itself | - |
+| [rns-web](https://github.com/lagertha-rs/rns-web) | Runestaff documentation website ([rune.lagertha-vm.com](https://rune.lagertha-vm.com/)) | - |
 
 ## Dependency graph
 
