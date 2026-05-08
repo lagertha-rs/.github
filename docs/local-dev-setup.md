@@ -16,60 +16,44 @@ gh repo clone lagertha-rs/rns-lsp
 gh repo clone lagertha-rs/lagertha-vm
 ```
 
-## Patch overrides (.cargo/config.toml)
+## Workspace-local cargo overrides
 
-Cargo's `[patch.crates-io]` in `.cargo/config.toml` redirects crates.io dependencies to local paths. This file is gitignored so it stays local-only.
+These repos depend on sibling crates through `git = "https://github.com/lagertha-rs/..."`.
 
-Create `.cargo/config.toml` in each repo that has crates.io dependencies on sibling crates:
-
-### lvm-class
+Use a single workspace-local `.cargo/config.toml` at the shared workspace root instead:
 
 ```toml
-[patch.crates-io]
-lvm-common = { path = "../lvm-common" }
+[patch."https://github.com/lagertha-rs/rns-lang"]
+rns-lang = { path = "rns-lang" }
+
+[patch."https://github.com/lagertha-rs/lvm-class"]
+lvm-class = { path = "lvm-class" }
+
+[patch."https://github.com/lagertha-rs/lvm-common"]
+lvm-common = { path = "lvm-common" }
 ```
 
-### rns-lang
+From the example layout above, create this file at:
 
-```toml
-[patch.crates-io]
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
+```text
+lvm-workspace/.cargo/config.toml
 ```
 
-### rnsc
+Why root-level:
 
-```toml
-[patch.crates-io]
-rns-lang = { path = "../rns-lang" }
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
-```
+- stays local to one machine
+- keeps all `Cargo.toml` files clean
+- applies to every repo when you run Cargo inside the workspace tree
 
-### rns-lsp
+How it works:
 
-```toml
-[patch.crates-io]
-rns-lang = { path = "../rns-lang" }
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
-```
-
-### lagertha-vm
-
-```toml
-[patch.crates-io]
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
-```
-
-### lvm-common
-
-No `.cargo/config.toml` needed (no internal dependencies).
+- `rnsc` and `rns-lsp` use local `rns-lang`
+- `rns-lang` uses local `lvm-class`
+- `lvm-class` and `lagertha-vm` use local `lvm-common`
 
 ## Pre-commit hook for Cargo.lock
 
-The patch overrides cause `Cargo.lock` to diverge from the registry version. Binary crates (`rnsc`, `rns-lsp`, `lagertha-vm`) track `Cargo.lock` in git, so this creates unwanted noise.
+The local git-source overrides cause `Cargo.lock` to diverge from the committed remote-source version. Binary crates (`rnsc`, `rns-lsp`, `lagertha-vm`) track `Cargo.lock` in git, so this creates unwanted noise.
 
 Install the following pre-commit hook in each binary crate repo. It automatically handles `Cargo.lock` on commit:
 
@@ -89,10 +73,10 @@ chmod +x .git/hooks/pre-commit
 
 ```sh
 #!/bin/sh
-# Smart Cargo.lock handling for repos with [patch.crates-io] local overrides.
+# Smart Cargo.lock handling for repos with local git-source overrides.
 #
 # When Cargo.lock is staged, this hook:
-#   1. Moves .cargo/config.toml aside (disabling patch overrides)
+#   1. Moves workspace .cargo/config.toml aside (disabling local overrides)
 #   2. Regenerates Cargo.lock from the clean registry sources
 #   3. If the clean lockfile differs from HEAD, stages the real changes
 #   4. If it matches HEAD, unstages it (it was just patch noise)
@@ -100,20 +84,20 @@ chmod +x .git/hooks/pre-commit
 #
 # Use `git commit --no-verify` to bypass entirely.
 
-CARGO_CONFIG=".cargo/config.toml"
-CARGO_CONFIG_BAK=".cargo/config.toml.hook-bak"
+WORKSPACE_CARGO_CONFIG="../.cargo/config.toml"
+WORKSPACE_CARGO_CONFIG_BAK="../.cargo/config.toml.hook-bak"
 
 # Only act if Cargo.lock is staged
 git diff --cached --name-only | grep -q '^Cargo\.lock$' || exit 0
 
-# If there's no patch config, nothing special to do — let the staged lockfile through
-[ -f "$CARGO_CONFIG" ] || exit 0
+# If there's no workspace override config, nothing special to do
+[ -f "$WORKSPACE_CARGO_CONFIG" ] || exit 0
 
 # Ensure we always restore the config, even on failure
-trap 'if [ -f "$CARGO_CONFIG_BAK" ]; then mv "$CARGO_CONFIG_BAK" "$CARGO_CONFIG"; fi' EXIT
+trap 'if [ -f "$WORKSPACE_CARGO_CONFIG_BAK" ]; then mv "$WORKSPACE_CARGO_CONFIG_BAK" "$WORKSPACE_CARGO_CONFIG"; fi' EXIT
 
-# Move config aside to disable patches
-mv "$CARGO_CONFIG" "$CARGO_CONFIG_BAK"
+# Move config aside to disable local overrides
+mv "$WORKSPACE_CARGO_CONFIG" "$WORKSPACE_CARGO_CONFIG_BAK"
 
 # Regenerate a clean lockfile from registry sources
 cargo generate-lockfile --quiet 2>/dev/null
@@ -121,7 +105,7 @@ cargo generate-lockfile --quiet 2>/dev/null
 # Check if the clean lockfile differs from what's in HEAD
 if git diff --quiet HEAD -- Cargo.lock; then
     # No real changes — this was purely patch noise
-    echo "[pre-commit] Cargo.lock changes are patch-override noise, unstaging."
+    echo "[pre-commit] Cargo.lock changes are local-override noise, unstaging."
     git restore --staged Cargo.lock
 else
     # Real dependency changes — stage the clean version
@@ -129,56 +113,28 @@ else
     git add Cargo.lock
 fi
 
-# Restore the patched lockfile for local dev (config.toml restored by trap)
+# Restore local override config (handled by trap)
 ```
 
 ## Quick setup script
 
-Run this from the workspace root to set up all config files and hooks at once:
+Run this from the workspace root to set up the shared config and hooks at once:
 
 ```sh
 #!/bin/sh
 # Run from the workspace root (parent of all repo dirs)
 
-# lvm-class
-mkdir -p lvm-class/.cargo
-cat > lvm-class/.cargo/config.toml << 'EOF'
-[patch.crates-io]
-lvm-common = { path = "../lvm-common" }
-EOF
+# Shared workspace Cargo override
+mkdir -p .cargo
+cat > .cargo/config.toml << 'EOF'
+[patch."https://github.com/lagertha-rs/rns-lang"]
+rns-lang = { path = "rns-lang" }
 
-# rns-lang
-mkdir -p rns-lang/.cargo
-cat > rns-lang/.cargo/config.toml << 'EOF'
-[patch.crates-io]
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
-EOF
+[patch."https://github.com/lagertha-rs/lvm-class"]
+lvm-class = { path = "lvm-class" }
 
-# rnsc
-mkdir -p rnsc/.cargo
-cat > rnsc/.cargo/config.toml << 'EOF'
-[patch.crates-io]
-rns-lang = { path = "../rns-lang" }
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
-EOF
-
-# rns-lsp
-mkdir -p rns-lsp/.cargo
-cat > rns-lsp/.cargo/config.toml << 'EOF'
-[patch.crates-io]
-rns-lang = { path = "../rns-lang" }
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
-EOF
-
-# lagertha-vm
-mkdir -p lagertha-vm/.cargo
-cat > lagertha-vm/.cargo/config.toml << 'EOF'
-[patch.crates-io]
-lvm-class = { path = "../lvm-class" }
-lvm-common = { path = "../lvm-common" }
+[patch."https://github.com/lagertha-rs/lvm-common"]
+lvm-common = { path = "lvm-common" }
 EOF
 
 # Install pre-commit hook in binary crates
@@ -187,5 +143,5 @@ for repo in rnsc rns-lsp lagertha-vm; do
     chmod +x "$repo/.git/hooks/pre-commit"
 done
 
-echo "Done. All patch configs and hooks installed."
+echo "Done. Workspace cargo override and hooks installed."
 ```
