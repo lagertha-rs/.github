@@ -1,42 +1,56 @@
 #!/bin/sh
-# Smart Cargo.lock handling for repos with [patch.crates-io] local overrides.
-#
-# When Cargo.lock is staged, this hook:
-#   1. Moves .cargo/config.toml aside (disabling patch overrides)
-#   2. Regenerates Cargo.lock from the clean registry sources
-#   3. If the clean lockfile differs from HEAD, stages the real changes
-#   4. If it matches HEAD, unstages it (it was just patch noise)
-#   5. Restores .cargo/config.toml
-#
-# Use `git commit --no-verify` to bypass entirely.
 
-CARGO_CONFIG=".cargo/config.toml"
-CARGO_CONFIG_BAK=".cargo/config.toml.hook-bak"
+# Shared pre-commit hook for local Lagertha workspace repos.
+#
+# Behavior:
+# 1. If staged changes include Rust sources or Cargo.toml, run `cargo fmt --all`.
+# 2. If formatting changes the working tree, stop so the user can review and stage the result.
+# 3. If Cargo.lock is staged and a workspace-local `.cargo/config.toml` exists, temporarily
+#    disable the workspace override, regenerate a clean lockfile, then keep or unstage the
+#    lockfile depending on whether it differs from HEAD.
 
-# Only act if Cargo.lock is staged
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+workspace_root=$(dirname "$repo_root")
+workspace_cargo_config="$workspace_root/.cargo/config.toml"
+workspace_cargo_config_bak="$workspace_root/.cargo/config.toml.hook-bak"
+
+unstaged_fingerprint() {
+    git diff --binary | git hash-object --stdin
+}
+
+if git diff --cached --name-only --diff-filter=ACMR | grep -Eq '(^|/)(Cargo\.toml|.*\.rs)$'; then
+    echo "[pre-commit] Running cargo fmt --all"
+    pre_fmt_diff=$(unstaged_fingerprint)
+    cargo fmt --all
+    post_fmt_diff=$(unstaged_fingerprint)
+
+    if [ "$pre_fmt_diff" != "$post_fmt_diff" ]; then
+        echo "[pre-commit] cargo fmt updated files. Review and stage them, then commit again."
+        exit 1
+    fi
+fi
+
+# Only act on lockfile cleanup if Cargo.lock is staged.
 git diff --cached --name-only | grep -q '^Cargo\.lock$' || exit 0
 
-# If there's no patch config, nothing special to do — let the staged lockfile through
-[ -f "$CARGO_CONFIG" ] || exit 0
+# No workspace override config means no local-source noise to clean up.
+[ -f "$workspace_cargo_config" ] || exit 0
 
-# Ensure we always restore the config, even on failure
-trap 'if [ -f "$CARGO_CONFIG_BAK" ]; then mv "$CARGO_CONFIG_BAK" "$CARGO_CONFIG"; fi' EXIT
+trap 'if [ -f "$workspace_cargo_config_bak" ]; then mv "$workspace_cargo_config_bak" "$workspace_cargo_config"; fi' EXIT
 
-# Move config aside to disable patches
-mv "$CARGO_CONFIG" "$CARGO_CONFIG_BAK"
+mv "$workspace_cargo_config" "$workspace_cargo_config_bak"
 
-# Regenerate a clean lockfile from registry sources
-cargo generate-lockfile --quiet 2>/dev/null
+if ! cargo generate-lockfile --quiet 2>/dev/null; then
+    echo "[pre-commit] cargo generate-lockfile failed."
+    exit 1
+fi
 
-# Check if the clean lockfile differs from what's in HEAD
 if git diff --quiet HEAD -- Cargo.lock; then
-    # No real changes — this was purely patch noise
-    echo "[pre-commit] Cargo.lock changes are patch-override noise, unstaging."
+    echo "[pre-commit] Cargo.lock changes are local-override noise, unstaging."
     git restore --staged Cargo.lock
 else
-    # Real dependency changes — stage the clean version
     echo "[pre-commit] Cargo.lock has real changes, staging clean version."
     git add Cargo.lock
 fi
-
-# Restore the patched lockfile for local dev (config.toml restored by trap)
