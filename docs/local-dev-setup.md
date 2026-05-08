@@ -18,8 +18,7 @@ gh repo clone lagertha-rs/lagertha-vm
 
 ## Workspace-local cargo overrides
 
-These repos depend on sibling crates through `git = "https://github.com/lagertha-rs/..."`, not `crates.io`.
-That means `[patch.crates-io]` does nothing here.
+These repos depend on sibling crates through `git = "https://github.com/lagertha-rs/..."`.
 
 Use a single workspace-local `.cargo/config.toml` at the shared workspace root instead:
 
