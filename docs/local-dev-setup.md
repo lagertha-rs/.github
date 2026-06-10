@@ -4,39 +4,30 @@ This guide explains how to set up cross-repo local development so changes in one
 
 ## Prerequisites
 
-Clone all repos into a shared workspace directory:
+Clone both repos into a shared workspace directory:
 
 ```sh
-mkdir lvm-workspace && cd lvm-workspace
-gh repo clone lagertha-rs/lvm-common
-gh repo clone lagertha-rs/lvm-class
-gh repo clone lagertha-rs/rns-lang
-gh repo clone lagertha-rs/rnsc
-gh repo clone lagertha-rs/rns-lsp
-gh repo clone lagertha-rs/lagertha-vm
+mkdir lagertha-workspace && cd lagertha-workspace
+gh repo clone lagertha-rs/lagertha
+gh repo clone lagertha-rs/runestaff
 ```
 
 ## Workspace-local cargo overrides
 
-These repos depend on sibling crates through `git = "https://github.com/lagertha-rs/..."`.
+The runestaff repo depends on lvm-class and lvm-common from the lagertha repo through crates.io.
 
-Use a single workspace-local `.cargo/config.toml` at the shared workspace root instead:
+Use a single workspace-local `.cargo/config.toml` at the shared workspace root to override with local paths:
 
 ```toml
-[patch."https://github.com/lagertha-rs/rns-lang"]
-rns-lang = { path = "rns-lang" }
-
-[patch."https://github.com/lagertha-rs/lvm-class"]
-lvm-class = { path = "lvm-class" }
-
-[patch."https://github.com/lagertha-rs/lvm-common"]
-lvm-common = { path = "lvm-common" }
+[patch.crates-io]
+lvm-common = { path = "lagertha/lvm-common" }
+lvm-class = { path = "lagertha/lvm-class" }
 ```
 
 From the example layout above, create this file at:
 
 ```text
-lvm-workspace/.cargo/config.toml
+lagertha-workspace/.cargo/config.toml
 ```
 
 Why root-level:
@@ -47,55 +38,49 @@ Why root-level:
 
 How it works:
 
-- `rnsc` and `rns-lsp` use local `rns-lang`
-- `rns-lang` uses local `lvm-class`
-- `lvm-class` and `lagertha-vm` use local `lvm-common`
+- `runestaff/rns-lang` uses local `lagertha/lvm-class`
+- `lagertha/lvm-class` uses local `lagertha/lvm-common`
 
-## Pre-commit hook for Cargo.lock
+## Pre-commit hook
 
-The local git-source overrides cause `Cargo.lock` to diverge from the committed remote-source version. Repos that track `Cargo.lock` in git will pick up that local noise unless the hook cleans it up.
+Both repos enforce `cargo fmt` and `cargo clippy` via pre-commit hooks.
 
-Use the shared pre-commit hook from `.github/docs/pre-commit-hook.sh` in every local repo.
+### Installation
+
+The hook script is in `.github/docs/pre-commit-hook.sh`. Install it in each repo:
+
+```sh
+cp .github/docs/pre-commit-hook.sh lagertha/.git/hooks/pre-commit
+cp .github/docs/pre-commit-hook.sh runestaff/.git/hooks/pre-commit
+chmod +x lagertha/.git/hooks/pre-commit
+chmod +x runestaff/.git/hooks/pre-commit
+```
 
 What it does:
 
 - runs `cargo fmt --all` when staged changes include Rust sources or `Cargo.toml`
-- stops the commit if formatting changed files, so you can review and stage the result
-- cleans `Cargo.lock` noise caused by the workspace-local override config
+- runs `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- stops the commit if any check fails
 - use `git commit --no-verify` to bypass it
-
-### Installation
-
-Copy the shared script into `.git/hooks/pre-commit` and make it executable:
-
-```sh
-cp .github/docs/pre-commit-hook.sh <repo>/.git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
-```
 
 ## Quick setup script
 
-Run this from the workspace root to set up the shared config and install the hook in all local repos:
+Run this from the workspace root to set up the shared config and install the hook in both repos:
 
 ```sh
 #!/bin/sh
-# Run from the workspace root (parent of all repo dirs)
+# Run from the workspace root (parent of lagertha and runestaff)
 
 # Shared workspace Cargo override
 mkdir -p .cargo
 cat > .cargo/config.toml << 'EOF'
-[patch."https://github.com/lagertha-rs/rns-lang"]
-rns-lang = { path = "rns-lang" }
-
-[patch."https://github.com/lagertha-rs/lvm-class"]
-lvm-class = { path = "lvm-class" }
-
-[patch."https://github.com/lagertha-rs/lvm-common"]
-lvm-common = { path = "lvm-common" }
+[patch.crates-io]
+lvm-common = { path = "lagertha/lvm-common" }
+lvm-class = { path = "lagertha/lvm-class" }
 EOF
 
-# Install shared pre-commit hook in every local repo
-for repo in lvm-common lvm-class rns-lang rnsc rns-lsp lagertha-vm; do
+# Install shared pre-commit hook in both repos
+for repo in lagertha runestaff; do
     cp .github/docs/pre-commit-hook.sh "$repo/.git/hooks/pre-commit"
     chmod +x "$repo/.git/hooks/pre-commit"
 done
