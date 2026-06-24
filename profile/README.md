@@ -47,7 +47,7 @@ lagertha/
   javap             → lvm-class
 
 runestaff/
-  rns-lang          → lvm-class → lvm-common
+  rns-lang          → lvm-class
   rnsc              → rns-lang
   rns-lsp           → rns-lang
 ```
