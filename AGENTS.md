@@ -40,3 +40,10 @@ before changing its code. Repository-specific instructions override this file.
 - Add a handoff comment before stopping incomplete work.
 - Record durable architectural decisions in repository ADRs.
 - Never duplicate Project status in Markdown roadmaps or TODO lists.
+- For Java behavioral work, derive a bounded JVMS/JLS case matrix before
+  choosing tests. Cover distinct precedence, inheritance, access, flag, and
+  error branches in scope; record intentionally deferred or source-illegal
+  cases instead of stopping after the first failing example.
+- Reconcile confirmed behavior gaps with affected feature definitions. Do not
+  leave a feature marked implemented when a specification-required limitation
+  has been demonstrated.

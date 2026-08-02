@@ -56,7 +56,7 @@ Technical implementation truth remains in repository feature files and tests.
 |---|---|
 | Status | Inbox, Ready, In progress, Blocked, Done |
 | Horizon | Now, Next, Later |
-| Type | Outcome, Feature, Bug, Test, Debt, Docs, Decision |
+| Work Type | Outcome, Feature, Bug, Test, Debt, Docs, Decision |
 | Area | Execution, Class files, Loading, Runtime/JDK, Memory, Concurrency, Debugging, Runestaff, Tooling |
 | Size | S, M |
 
@@ -69,6 +69,11 @@ Field meanings:
 - Manual ordering within a Horizon resolves ties.
 
 Do not add percentage-complete, due-date, or duplicate priority fields.
+
+GitHub reserves `Type` for organization Issue Types. Use the custom
+`Work Type` Project field unless the organization deliberately adopts and
+configures Issue Types with the same values. Creating or changing organization
+Issue Types requires `admin:org`; normal Project administration does not.
 
 ### Views
 
@@ -146,6 +151,114 @@ Assign every open Outcome a Horizon:
 - `Next`: three to five likely outcomes.
 - `Later`: broad future outcomes without scheduling promises.
 
+## Choosing What Comes Next
+
+Choose roadmap work by the runnable Java capability it enables. Specification
+coverage and generated feature reports provide evidence about gaps; they do not
+define priority by themselves. This avoids optimizing only for already tracked
+features or completing isolated JVM components that do not advance an
+end-to-end behavior.
+
+The maintainer owns the final choice. An assisting LLM may research candidates,
+compare them, and recommend one, but must not change Project priority before the
+maintainer confirms the selection.
+
+### Candidate Outcomes
+
+Start with three to five candidate Outcomes. Each candidate must:
+
+- Describe an observable capability of a runnable Java program or the launcher.
+- Include a small program or concrete scenario that does not work yet.
+- Advance the Java 25 compatibility target.
+- Have testable exit criteria.
+- Be coherent enough to decompose into `S` or `M` child Issues.
+
+Candidate sources include:
+
+- A representative Java program that fails on Lagertha.
+- A limitation in the generated feature report that blocks richer programs.
+- An untracked Java 25 capability required by a selected program.
+- A dependency that blocks several useful capabilities.
+- A correctness bug that breaks already claimed behavior.
+- Runestaff work required to create exact Lagertha test evidence.
+
+Do not derive the candidate list only from partial or missing registry entries.
+The registry records declared scope, not the complete Java 25 feature universe.
+Do not create registry entries or Issues for every discovered gap during
+candidate research.
+
+### Candidate Research
+
+For each candidate, perform a bounded discovery pass and record:
+
+| Question | Required evidence |
+|---|---|
+| What becomes runnable? | Failing program or exact observable scenario |
+| Why is it useful now? | Compatibility unlocked or current blocker removed |
+| What is missing? | Relevant feature IDs plus important untracked gaps |
+| What does it depend on? | Lagertha, Runestaff, decision, or external dependencies |
+| How large is it? | Likely child Issues and `S` or `M` estimates |
+| How will it be proven? | Proposed integration behavior and reference-JDK comparison |
+| What is uncertain? | Specification, architecture, or implementation risks |
+
+Inspect current Project state, open Issues and handoffs, generated reports,
+feature definitions, integration tests, relevant code, Java 25 specifications,
+and sibling repositories where needed. Generated release reports may lag local
+code, so confirm important claims against current feature definitions and tests.
+Use the official Java SE 25 HTML specifications as the primary source through
+Lagertha's ignored local specification cache. Search and read only the sections
+needed for the candidate, and use canonical direct section links for persisted
+references. Verify each page and fragment against the cached original HTML, as
+required by the affected repository's instructions. Refresh the cache only when
+it is missing or current upstream content must be reconfirmed. A local PDF may
+support fallback search, but do not convert the complete specification into
+project documentation.
+The required generated report inputs are:
+
+- The `Capability Index` in `lagertha/docs/features/README.md` for the minimal
+  capability state and candidate feature IDs.
+- Relevant sections of `lagertha/docs/features/TEST_COVERAGE.md` only when
+  existing integration evidence affects research or validation planning.
+
+Read capability details, feature YAML, tests, and implementation only for
+shortlisted candidates or when needed to resolve an important claim. Use the
+coverage report to plan validation, not to rank work by test count.
+
+### Comparison Rules
+
+Compare candidates in this order:
+
+1. Prefer work that enables a richer representative Java program.
+2. Prefer work that removes a dependency shared by several useful capabilities.
+3. Prefer end-to-end semantic behavior over isolated component completeness.
+4. Prefer work that produces clear integration evidence and reduces important
+   technical uncertainty.
+5. Prefer a bounded, coherent Outcome whose immediate work can be understood.
+6. Prefer dependency-ready work over work with unresolved prerequisites.
+
+Do not calculate a weighted priority score. It creates false precision for a
+small, irregularly maintained project. When candidates remain comparable, the
+maintainer's interest and learning goal resolve the tie.
+
+### Selection Loop
+
+Use this loop whenever the current `Now` Outcome completes, becomes blocked, or
+new evidence invalidates the current ordering:
+
+1. Review current Project state and the latest handoff.
+2. Research and compare three to five candidate Outcomes.
+3. Present one recommendation, alternatives, evidence, and uncertainties.
+4. Ask the maintainer to select or revise the recommendation.
+5. Put the selected Outcome in `Now` and keep three to five likely Outcomes in
+   `Next`.
+6. Decompose only the selected `Now` Outcome into immediate actionable Issues.
+7. Define its first failing integration scenario before implementation starts.
+
+The candidate comparison is a temporary decision aid, not another roadmap
+artifact. Persist only the selected Outcome, its immediate child Issues, Project
+fields, relevant decisions, and eventual feature and test evidence in their
+existing sources of truth.
+
 ## Actionable Issues
 
 Create an Issue when work is sufficiently understood and likely to be selected.
@@ -187,6 +300,11 @@ An Issue is Ready only when the maintainer can understand its desired behavior,
 scope, acceptance criteria, and validation without reconstructing intent from
 commit history. Write for implementation by a human, while including enough
 context for an LLM to assist with research, tests, review, and project updates.
+For Java behavioral Issues, acceptance and validation must be informed by a
+bounded JVMS/JLS case matrix. Identify materially distinct success, precedence,
+inheritance, access or flag, ambiguity, and specified-error branches in scope.
+Record source-illegal, exact-classfile, and intentionally deferred cases rather
+than treating one representative example as complete coverage.
 
 ## Workflow
 
@@ -207,6 +325,65 @@ Inbox -> Ready -> In progress -> Done
 
 When work becomes blocked, identify the dependency in an Issue comment. Move it
 back to Ready or In progress when the dependency clears.
+
+### Working an Outcome
+
+The Outcome defines the observable result; its actionable children define the
+implementation sequence. Work dependency-ready child Issues before closing the
+Outcome:
+
+1. Keep the selected Outcome in `Now` and `Ready` while child work is underway.
+2. Choose the first dependency-ready child, assign it if useful, and move only
+   that child to `In progress`.
+3. Implement against the child acceptance criteria. Link the pull request with
+   `Closes #<child>` and list affected feature IDs; do not close the parent
+   Outcome from a child pull request.
+4. After the child merges and passes completion review, close it and start the
+   next dependency-ready child.
+5. When all required children are done, review the parent Outcome against its
+   user-visible result and exit criteria before closing it.
+
+Children need not follow numeric order. Follow explicit dependencies. Do not
+start every child concurrently merely because all are in `Now`; keep at most one
+primary Issue `In progress`.
+
+## Completion Review
+
+Review completed work against its Issue before closing it. Passing tests or a
+merged pull request alone does not prove completion. The review must establish
+that the requested observable behavior, accepted scope, permanent capability
+state, and required evidence agree.
+
+For an actionable Issue:
+
+1. Read the Issue body, discussion, latest handoff, linked pull requests, and
+   repository instructions.
+2. Map every acceptance criterion to merged code, observable behavior, or other
+   direct evidence. Mark criteria with no evidence as unmet.
+3. Confirm relevant Java behavior against verified direct Java SE 25
+   specification sections. Distinguish specification requirements from
+   reference-JDK or HotSpot behavior.
+4. Reconstruct the relevant specification case matrix independently and check
+   that materially distinct in-scope branches have explicit evidence. A single
+   passing fixture does not prove an algorithm with precedence or failure
+   branches.
+5. Inspect the complete merged diff for scope omissions, regressions, and
+   accidental behavior changes. Record unrelated discoveries as follow-up work.
+6. Run focused validation and the required checks for every affected repository.
+   Confirm linked CI is current and successful. Review changed snapshots for
+   semantics rather than accepting them because they changed.
+7. Verify affected feature definitions, fixtures, snapshots, generated reports,
+   documentation, and ADRs are updated where the repository process requires
+   them. Do not edit generated artifacts by hand.
+8. Report a `Ready to close` or `Blocked` verdict with evidence for every
+   criterion, validation results, residual risks, and follow-up Issues.
+
+An assisting LLM may perform the review and recommend closure, but must not
+close the Issue, alter acceptance criteria, or move it to Done without explicit
+maintainer confirmation. Never weaken criteria merely to match the delivered
+implementation. If agreed scope changed, document that decision before closure.
+For an Outcome, also verify all required child work and the stated user-visible
+result; closed child Issues alone do not prove the Outcome.
 
 ## Session Handoffs
 
@@ -267,8 +444,8 @@ Use this ADR structure:
 ## Alternatives
 ```
 
-Use Project Type `Decision` while a decision remains unresolved. Close the Issue
-after recording the result in its discussion or an ADR.
+Use Project Work Type `Decision` while a decision remains unresolved. Close the
+Issue after recording the result in its discussion or an ADR.
 
 ## Pull Requests
 
@@ -302,8 +479,8 @@ Keep organization-wide process labels minimal:
 - `needs-decision`
 - `needs-research`
 
-Project fields already own Type, Status, Horizon, Area, and Size. Do not duplicate
-those values as labels.
+Project fields already own Work Type, Status, Horizon, Area, and Size. Do not
+duplicate those values as labels.
 
 ## Automation
 
@@ -317,7 +494,7 @@ Configure Project workflows to:
 LLMs may:
 
 - Classify Inbox items.
-- Set Type, Area, Horizon, and Size.
+- Set Work Type, Area, Horizon, and Size.
 - Move selected work to In progress.
 - Add handoff comments.
 - Mark explicit blockers.
@@ -358,6 +535,21 @@ Read repository-local `AGENTS.md` files first. Run validation in every repositor
 changed by the work.
 
 ## Setup Checklist
+
+GitHub operational notes:
+
+- `gh repo edit lagertha-rs/lagertha --enable-issues` enables Issues when the
+  repository was created without them.
+- `gh project create` creates a private Project by default. Explicitly run
+  `gh project edit <number> --owner lagertha-rs --visibility PUBLIC`.
+- New Projects start with `Todo`, `In Progress`, and `Done`. Rename and extend
+  the Status options to the workflow defined above before adding work.
+- `gh project link` makes the Project visible from a repository; it does not
+  auto-add new repository Issues.
+- `gh project` can create fields and add or edit items, but currently cannot
+  configure view grouping or sorting, repository auto-add, or reopen workflows.
+  Configure those settings in the GitHub web UI and verify them afterward with
+  `gh project field-list`, `gh project item-list`, and GraphQL queries.
 
 Initial organization setup:
 
